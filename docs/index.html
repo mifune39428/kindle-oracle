@@ -198,11 +198,17 @@ const CAND     = 200;  // 多様化する前に確保する候補数
 const MODEL_FALLBACKS = ['gemini-2.5-flash','gemini-flash-latest',
                          'gemini-2.5-flash-lite','gemini-flash-lite-latest'];
 
+// クエリの正規化は 40 字を書くだけの短い仕事。軽いモデルのほうが速く、
+// 無料枠はモデルごとに別勘定なので、回答用の枠を温存できる。
+const NORMALIZE_MODELS = ['gemini-2.5-flash-lite','gemini-flash-lite-latest',
+                          'gemini-2.5-flash','gemini-flash-latest'];
+
 const EXAMPLES = ['はなしかたでない悩んでいる','人前で緊張する','お金が貯まらない',
                   '朝おきられない','人間関係がしんどい','集中力が続かない'];
 
-let IDX = null;        // {vectors:Int8Array, items, books, dim, count}
-let extractor = null;  // Transformers.js のパイプライン
+let IDX = null;              // {vectors:Int8Array, items, books, dim, count}
+let extractor = null;        // Transformers.js のパイプライン
+let loadingExtractor = null; // 読み込み中の約束。二重ロード防止
 
 /* ═══════════ 小道具 ═══════════ */
 const $ = s => document.querySelector(s);
@@ -299,18 +305,26 @@ async function decryptIndex(blob, passphrase, onStage) {
 }
 
 /* ═══════════ 埋め込み (端末内) ═══════════ */
-async function loadExtractor(onProgress) {
-  if (extractor) return extractor;
-  const {pipeline, env} = await import(TRANSFORMERS_URL);
-  env.allowLocalModels = false;   // HuggingFace から取得する
-  extractor = await pipeline('feature-extraction', EMBED_MODEL, {
-    dtype: EMBED_DTYPE,
-    progress_callback: p => {
-      if (p.status === 'progress' && p.total)
-        onProgress(p.loaded / p.total, p.file);
-    }
-  });
-  return extractor;
+function loadExtractor(onProgress) {
+  if (extractor) return Promise.resolve(extractor);
+  // 読み込み中にもう一度呼ばれたら同じ約束を返す。二重に走らせると
+  // 同じモデルを二重取得して "network error" で両方倒れる。
+  if (loadingExtractor) return loadingExtractor;
+
+  loadingExtractor = (async () => {
+    const {pipeline, env} = await import(TRANSFORMERS_URL);
+    env.allowLocalModels = false;   // HuggingFace から取得する
+    extractor = await pipeline('feature-extraction', EMBED_MODEL, {
+      dtype: EMBED_DTYPE,
+      progress_callback: p => {
+        if (p.status === 'progress' && p.total)
+          onProgress(p.loaded / p.total, p.file);
+      }
+    });
+    return extractor;
+  })();
+  loadingExtractor.catch(() => { loadingExtractor = null; });  // 失敗したら再挑戦できる
+  return loadingExtractor;
 }
 
 async function embedQuery(text) {
@@ -366,7 +380,9 @@ function apiKey() {
   return k;
 }
 
-async function gemini(model, prompt, maxTokens) {
+/* onChunk を渡すとストリーミングで受け取る。答えが出そろうのを待たずに
+   書き始められるので、体感が大きく変わる。 */
+async function gemini(model, prompt, maxTokens, onChunk) {
   // 既定で思考が有効なモデルは、その分が maxOutputTokens から引かれて
   // 本文が途中で切れる。だから thinkingBudget:0 で切りたいのだが、
   // gemini-*-latest 系はこの引数自体を拒否して 400 を返す。
@@ -379,7 +395,8 @@ async function gemini(model, prompt, maxTokens) {
     };
     if (noThink) generationConfig.thinkingConfig = {thinkingBudget: 0};
 
-    const res = await fetch(`${API_BASE}/models/${model}:generateContent`, {
+    const method = onChunk ? 'streamGenerateContent?alt=sse' : 'generateContent';
+    const res = await fetch(`${API_BASE}/models/${model}:${method}`, {
       method:'POST',
       headers:{'Content-Type':'application/json','x-goog-api-key':apiKey()},
       body: JSON.stringify({contents:[{parts:[{text: prompt}]}], generationConfig})
@@ -391,21 +408,45 @@ async function gemini(model, prompt, maxTokens) {
       err.status = res.status;
       throw err;
     }
-    const data = await res.json();
-    const cand = data.candidates && data.candidates[0];
-    const parts = cand && cand.content && cand.content.parts;
-    return parts ? parts.map(p => p.text || '').join('').trim() : '';
+
+    if (!onChunk) {
+      const data = await res.json();
+      const parts = data.candidates?.[0]?.content?.parts;
+      return parts ? parts.map(p => p.text || '').join('').trim() : '';
+    }
+
+    // SSE を行単位で読む。"data: {...}" が 1 件ずつ流れてくる。
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '', full = '';
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream:true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();               // 行の途中は次回に持ち越す
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        try {
+          const parts = JSON.parse(line.slice(5))?.candidates?.[0]?.content?.parts;
+          if (!parts) continue;
+          full += parts.map(p => p.text || '').join('');
+          onChunk(full);
+        } catch { /* 分割された JSON は次のチャンクで揃う */ }
+      }
+    }
+    return full.trim();
   }
   return '';
 }
 
-async function generate(prompt, maxTokens) {
+async function generate(prompt, maxTokens, onChunk, models) {
   const pref = localStorage.getItem('geminiModel') || MODEL_FALLBACKS[0];
-  const order = [pref, ...MODEL_FALLBACKS.filter(m => m !== pref)];
+  const order = models || [pref, ...MODEL_FALLBACKS.filter(m => m !== pref)];
   let last;
   for (const model of order) {
     try {
-      const text = await gemini(model, prompt, maxTokens);
+      const text = await gemini(model, prompt, maxTokens, onChunk);
       if (text) return {text, model};
       last = new Error('モデルが空の回答を返しました');
     } catch (e) {
@@ -457,15 +498,9 @@ ${lines}`;
 }
 
 /* ═══════════ 描画 ═══════════ */
-function renderAnswer(text, hits, model, normalized) {
-  const html = esc(text)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\[(\d{1,2})\]/g, (m, n) => {
-      const i = +n;
-      return (i >= 1 && i <= hits.length)
-        ? `<a class="cite" href="#src${i}">${i}</a>` : m;
-    });
 
+/* 検索が終わった時点で呼ぶ。答えを待たずに「どの本が引っかかったか」を出す。 */
+function renderSources(hits, normalized) {
   const cards = hits.map((h, i) => {
     const it = IDX.items[h.idx], bk = IDX.books[it.b];
     const link = bk.s
@@ -483,11 +518,25 @@ function renderAnswer(text, hits, model, normalized) {
 
   $('#answer').innerHTML = `
     ${normalized ? `<div class="qnorm">検索した言葉: ${esc(normalized)}</div>` : ''}
-    <div class="answer-body">${html}</div>
+    <div class="answer-body" id="abody"></div>
+    <div id="astatus"><div class="status"><span class="spinner"></span>
+      <span class="stxt">本の言葉から答えを組み立てています…</span></div></div>
     <h2 class="sec">引いた線 ${hits.length} 件</h2>
     ${cards}
-    <p class="hint" style="margin-top:18px">${esc(model)} が
-      ${IDX.count.toLocaleString()} 件のハイライトから選びました</p>`;
+    <p class="hint" id="ameta" style="margin-top:18px"></p>`;
+}
+
+/* ストリーミング中に何度も呼ばれる。太字と [n] だけ整えて流し込む。 */
+function updateAnswerText(text, hits) {
+  const body = $('#abody');
+  if (!body) return;
+  body.innerHTML = esc(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[(\d{1,2})\]/g, (m, n) => {
+      const i = +n;
+      return (i >= 1 && i <= hits.length)
+        ? `<a class="cite" href="#src${i}">${i}</a>` : m;
+    });
 }
 
 /* ═══════════ 動作 ═══════════ */
@@ -543,30 +592,46 @@ async function doAsk() {
 
   try {
     apiKey();   // 未設定ならここで止める
+    const t0 = performance.now();
 
     // 1. 相談文を検索向けに整える。e5 は崩れた口語に弱いのでこれが効く。
-    //    枠切れなどで失敗しても、生の文のまま検索は続ける。
+    //    短い仕事なので軽いモデルを先に使う。枠切れで失敗しても生の文で続ける。
     setStatus(box, '相談を読みといています…', true);
     let normalized = null;
     try {
-      const r = await generate(normalizePrompt(raw), 200);
+      const r = await generate(normalizePrompt(raw), 200, null, NORMALIZE_MODELS);
       normalized = r.text.split('\n')[0].replace(/^[「"']|["'」]$/g, '').trim();
     } catch (e) {
       if (e.status !== 429 && e.status !== 503) throw e;
     }
     const query = normalized || raw;
+    const tNorm = performance.now();
 
-    // 2. 端末内で検索
-    setStatus(box, `${IDX.count.toLocaleString()} 件のハイライトを探しています…`, true);
+    // 2. 端末内で検索。埋め込みも検索も 60ms 程度で終わるが、AI の起動だけは
+    //    十数秒かかる。起動時に先読みしてあるので普通は待たない。
+    setStatus(box, extractor
+      ? `${IDX.count.toLocaleString()} 件のハイライトを探しています…`
+      : 'AI を起こしています…（アプリを開いた直後だけ少しかかります）', true);
     const qvec = await embedQuery(query);
     await new Promise(r => setTimeout(r, 0));   // 表示を先に反映させる
     const hits = search(qvec);
     if (!hits.length) throw new Error('該当するハイライトが見つかりませんでした');
+    const tSearch = performance.now();
 
-    // 3. 本の言葉だけで答えを組み立てる
-    setStatus(box, '本の言葉から答えを組み立てています…', true);
-    const {text, model} = await generate(answerPrompt(raw, hits), 2048);
-    renderAnswer(text, hits, model, normalized);
+    // 3. 答えを待たずに、まず引っかかった箇所を見せる
+    renderSources(hits, normalized);
+
+    // 4. 本の言葉だけで答えを組み立てる。届いた端から書いていく。
+    const {text, model} = await generate(
+      answerPrompt(raw, hits), 2048, t => updateAnswerText(t, hits));
+    updateAnswerText(text, hits);
+    const done = $('#astatus'); if (done) done.remove();
+    const meta = $('#ameta');
+    if (meta) meta.textContent =
+      `${model} が ${IDX.count.toLocaleString()} 件から選びました  ／  `
+      + `読みとり ${((tNorm - t0) / 1000).toFixed(1)}s`
+      + ` ・ 検索 ${((tSearch - tNorm) / 1000).toFixed(1)}s`
+      + ` ・ 執筆 ${((performance.now() - tSearch) / 1000).toFixed(1)}s`;
   } catch (e) {
     let msg = e.message;
     if (e.status === 429)
@@ -636,8 +701,13 @@ async function init() {
 
   try {
     const saved = await dbGet('data');
-    if (saved && saved.vectors && saved.vectors.length) { IDX = saved; showMain(); }
-    else showLock();
+    if (saved && saved.vectors && saved.vectors.length) {
+      IDX = saved;
+      showMain();
+      // 相談を打ち込んでいる間に AI を起こしておく。待ってから読み込むと
+      // 1 回目の検索だけ数秒よけいにかかる。失敗しても検索時に読み直す。
+      loadExtractor(() => {}).catch(() => {});
+    } else showLock();
   } catch { showLock(); }
 
   if ('serviceWorker' in navigator)
