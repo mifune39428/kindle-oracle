@@ -153,9 +153,9 @@ h2.sec::after{content:"";flex:1;height:1px;background:var(--line)}
 
     <label for="model">答えを書くモデル</label>
     <select id="model">
-      <option value="gemini-2.5-flash">gemini-2.5-flash（推奨）</option>
-      <option value="gemini-flash-latest">gemini-flash-latest</option>
-      <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite（軽い）</option>
+      <option value="gemini-flash-latest">gemini-flash-latest（推奨）</option>
+      <option value="gemini-flash-lite-latest">gemini-flash-lite-latest（軽くて速い）</option>
+      <option value="gemini-2.5-flash">gemini-2.5-flash（混みやすい）</option>
       <option value="gemini-pro-latest">gemini-pro-latest（賢いが枠が小さい）</option>
     </select>
     <p class="hint" style="margin-top:7px">無料枠に当たったら自動で他のモデルに切り替えます。</p>
@@ -193,15 +193,18 @@ const TOP_K    = 24;   // LLM に渡すハイライト数
 const PER_BOOK = 3;    // 1 冊から採る上限 (同じ本ばかりになるのを防ぐ)
 const CAND     = 200;  // 多様化する前に確保する候補数
 
-// 先頭が既定。gemini-2.5-flash は thinkingBudget:0 が効くので
-// 思考トークンを使わずに済み、速くて無料枠の減りも遅い。
-const MODEL_FALLBACKS = ['gemini-2.5-flash','gemini-flash-latest',
-                         'gemini-2.5-flash-lite','gemini-flash-lite-latest'];
+/* 先頭が既定。実際に叩いて確かめた順に並べてある。
+   バージョン固定名(gemini-2.5-*)は ListModels に出てくるのに呼ぶと
+   404 "no longer available to new users" が返るものがあり、
+   残っているものも 503 になりやすい。-latest 系だけが安定して通る。
+   その代わり -latest 系は thinkingBudget:0 を拒否する (gemini() 参照)。 */
+const MODEL_FALLBACKS = ['gemini-flash-latest','gemini-flash-lite-latest',
+                         'gemini-2.5-flash','gemini-pro-latest'];
 
 // クエリの正規化は 40 字を書くだけの短い仕事。軽いモデルのほうが速く、
 // 無料枠はモデルごとに別勘定なので、回答用の枠を温存できる。
-const NORMALIZE_MODELS = ['gemini-2.5-flash-lite','gemini-flash-lite-latest',
-                          'gemini-2.5-flash','gemini-flash-latest'];
+const NORMALIZE_MODELS = ['gemini-flash-lite-latest','gemini-flash-latest',
+                          'gemini-2.5-flash'];
 
 const EXAMPLES = ['はなしかたでない悩んでいる','人前で緊張する','お金が貯まらない',
                   '朝おきられない','人間関係がしんどい','集中力が続かない'];
@@ -440,9 +443,19 @@ async function gemini(model, prompt, maxTokens, onChunk) {
   return '';
 }
 
+/* モデル側の都合で断られる理由は色々ある(404 提供終了 / 429 枠切れ /
+   503 高負荷 / 400 引数拒否)。どれも別のモデルなら通ることがあるので、
+   ひとつずつ潰さずリストを最後まで試す。即座に諦めるのは、
+   どのモデルでも直らないと分かっている API キーの不備だけ。 */
+function isFatal(e) {
+  if (e.status === 401 || e.status === 403) return true;
+  return e.status === 400 && /API[_ ]?key|api key not valid/i.test(e.message);
+}
+
 async function generate(prompt, maxTokens, onChunk, models) {
   const pref = localStorage.getItem('geminiModel') || MODEL_FALLBACKS[0];
-  const order = models || [pref, ...MODEL_FALLBACKS.filter(m => m !== pref)];
+  const base = models || MODEL_FALLBACKS;
+  const order = models ? base : [pref, ...base.filter(m => m !== pref)];
   let last;
   for (const model of order) {
     try {
@@ -451,7 +464,7 @@ async function generate(prompt, maxTokens, onChunk, models) {
       last = new Error('モデルが空の回答を返しました');
     } catch (e) {
       last = e;
-      if (e.status !== 429 && e.status !== 503) throw e;  // 枠切れ以外は即諦める
+      if (isFatal(e)) throw e;
     }
   }
   throw last;
@@ -599,7 +612,9 @@ async function doAsk() {
     setStatus(box, '相談を読みといています…', true);
     let normalized = null;
     try {
-      const r = await generate(normalizePrompt(raw), 200, null, NORMALIZE_MODELS);
+      // 出力は 40 字ほどだが、思考を切れないモデルだと枠を思考に食われる。
+      // 余裕を持たせないと書き出す前に打ち切られる。
+      const r = await generate(normalizePrompt(raw), 800, null, NORMALIZE_MODELS);
       normalized = r.text.split('\n')[0].replace(/^[「"']|["'」]$/g, '').trim();
     } catch (e) {
       if (e.status !== 429 && e.status !== 503) throw e;
@@ -633,11 +648,18 @@ async function doAsk() {
       + ` ・ 検索 ${((tSearch - tNorm) / 1000).toFixed(1)}s`
       + ` ・ 執筆 ${((performance.now() - tSearch) / 1000).toFixed(1)}s`;
   } catch (e) {
+    // ここに来たのは全部のモデルを試したあと。原因ごとに言い換える。
     let msg = e.message;
-    if (e.status === 429)
-      msg = '今日の無料枠を使い切ったようです。時間をおくか、⚙ から別のモデルを選んでください。';
-    else if (e.status === 400 && /API[_ ]?key/i.test(msg))
+    if (isFatal(e))
       msg = 'API キーが正しくないようです。⚙ から確認してください。';
+    else if (e.status === 429)
+      msg = 'どのモデルも今日の無料枠を使い切ったようです。'
+          + '枠は日本時間の 16 時ごろに戻ります。';
+    else if (e.status === 503)
+      msg = 'Gemini が混み合っています。少し待ってからもう一度試してください。';
+    else if (e.status === 404)
+      msg = '選んでいるモデルが提供終了になっています。'
+          + '⚙ から別のモデルを選んでください。';
     setError(box, msg);
   } finally {
     $('#btn-ask').disabled = false;

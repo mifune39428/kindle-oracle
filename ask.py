@@ -20,8 +20,11 @@ import sys
 from gemini_api import request_with_retry
 from search import search
 
-GEN_MODELS = ["gemini-2.5-flash", "gemini-flash-latest",
-              "gemini-2.5-flash-lite", "gemini-flash-lite-latest"]
+# 実際に叩いて確かめた順。バージョン固定名(gemini-2.5-*)は ListModels に
+# 出てくるのに呼ぶと 404 "no longer available to new users" になるものがあり、
+# 残っているものも 503 になりやすい。-latest 系だけが安定して通る。
+GEN_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest",
+              "gemini-2.5-flash", "gemini-pro-latest"]
 
 NORMALIZE_PROMPT = """\
 次の相談文を、書籍のハイライト検索に使う検索クエリに書き換えてください。
@@ -80,9 +83,9 @@ def generate(prompt: str, max_tokens: int = 2048) -> tuple[str, str]:
                     attempts=2, base_delay=3)
             except SystemExit as e:
                 last = e
-                if no_think and "400" in str(e):
+                if no_think and "HTTP 400" in str(e):
                     continue          # 思考を切れないモデルだった。切らずに再挑戦
-                break                 # それ以外は次のモデルへ
+                break                 # 404/429/503 などは次のモデルへ
             parts = res["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in parts).strip()
             if text:
