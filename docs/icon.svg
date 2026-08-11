@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#2b2320"/>
+  <!-- 開いた本。マスカブル対応で中央 64% に収める -->
+  <g transform="translate(256 268) scale(0.82) translate(-256 -256)">
+    <path d="M112 168c46-26 104-26 144 4v208c-40-30-98-30-144-4z"
+          fill="#f5f3f0"/>
+    <path d="M400 168c-46-26-104-26-144 4v208c40-30 98-30 144-4z"
+          fill="#e0d9d1"/>
+    <path d="M256 172v208" stroke="#2b2320" stroke-width="11"
+          stroke-linecap="round" fill="none"/>
+  </g>
+  <!-- 本から立ちのぼる答えの光 -->
+  <circle cx="256" cy="96" r="26" fill="#d3a373"/>
+  <circle cx="330" cy="130" r="11" fill="#d3a373" opacity="0.6"/>
+  <circle cx="184" cy="132" r="8" fill="#d3a373" opacity="0.42"/>
+</svg>

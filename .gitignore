@@ -1,0 +1,16 @@
+# ハイライト本文そのもの。公開リポジトリに絶対に入れない。
+# 配布してよいのは docs/index.enc（合い言葉で暗号化したもの）だけ。
+highlights.jsonl
+vectors.i8
+meta.json
+cache-b*/
+
+# 埋め込みモデル (588MB)。fetch_model.py でいつでも取り直せる
+model/
+
+.venv/
+__pycache__/
+*.pyc
+.env
+build.log
+.DS_Store
