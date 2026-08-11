@@ -20,8 +20,8 @@ import sys
 from gemini_api import request_with_retry
 from search import search
 
-GEN_MODELS = ["gemini-flash-latest", "gemini-2.5-flash",
-              "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]
+GEN_MODELS = ["gemini-2.5-flash", "gemini-flash-latest",
+              "gemini-2.5-flash-lite", "gemini-flash-lite-latest"]
 
 NORMALIZE_PROMPT = """\
 次の相談文を、書籍のハイライト検索に使う検索クエリに書き換えてください。
@@ -59,26 +59,35 @@ ANSWER_PROMPT = """\
 def generate(prompt: str, max_tokens: int = 2048) -> tuple[str, str]:
     """使えるモデルを順に試す。枠切れ(429)なら次へ。
 
-    thinkingBudget=0 が要る。flash 系は既定で思考が有効で、その分が
-    maxOutputTokens から引かれるため、指定しないと本文が途中で切れる。
+    既定で思考が有効なモデルは、その分が maxOutputTokens から引かれて
+    本文が途中で切れる。だから thinkingBudget=0 で切りたいのだが、
+    gemini-*-latest 系はこの引数自体を拒否して 400 を返す。
+    まず切る前提で投げ、断られたら思考を許したまま投げ直し、
+    代わりに出力枠を広げて切れを防ぐ。
     """
     last = None
     for model in GEN_MODELS:
-        try:
-            res = request_with_retry(
-                f"models/{model}:generateContent",
-                {"contents": [{"parts": [{"text": prompt}]}],
-                 "generationConfig": {"temperature": 0.4,
-                                      "maxOutputTokens": max_tokens,
-                                      "thinkingConfig": {"thinkingBudget": 0}}},
-                attempts=2, base_delay=3)
+        for no_think in (True, False):
+            config = {"temperature": 0.4,
+                      "maxOutputTokens": max_tokens if no_think else max_tokens * 3}
+            if no_think:
+                config["thinkingConfig"] = {"thinkingBudget": 0}
+            try:
+                res = request_with_retry(
+                    f"models/{model}:generateContent",
+                    {"contents": [{"parts": [{"text": prompt}]}],
+                     "generationConfig": config},
+                    attempts=2, base_delay=3)
+            except SystemExit as e:
+                last = e
+                if no_think and "400" in str(e):
+                    continue          # 思考を切れないモデルだった。切らずに再挑戦
+                break                 # それ以外は次のモデルへ
             parts = res["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in parts).strip()
             if text:
                 return text, model
-        except SystemExit as e:
-            last = e
-            continue
+            break
     raise SystemExit(f"どのモデルでも生成できなかった: {last}")
 
 
