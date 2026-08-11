@@ -4,7 +4,7 @@
 
 // 中身を変えたらここの番号を上げる。activate で古いキャッシュを捨てるので、
 // 端末に残った旧版が返り続けるのを防げる。
-const CACHE = 'kindle-oracle-v2';
+const CACHE = 'kindle-oracle-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
                './icon.svg', './icon-192.png', './icon-512.png',
                './apple-touch-icon.png'];
