@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c1917" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="本に聞く">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>本に聞く</title>
+<style>
+:root{
+  --bg:#faf9f7; --panel:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4;
+  --accent:#9a6b3f; --accent-ink:#fff; --quote:#f5f3f0; --danger:#b91c1c;
+  --shadow:0 1px 2px rgba(28,25,23,.06),0 8px 24px rgba(28,25,23,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#1c1917; --panel:#262322; --ink:#f5f3f0; --muted:#a8a29e; --line:#3a3533;
+    --accent:#d3a373; --accent-ink:#1c1917; --quote:#211e1d; --danger:#f87171;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:16px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  -webkit-text-size-adjust:100%;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 96px}
+h1{font-size:19px;margin:0;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+.sub{color:var(--muted);font-size:12px;margin-top:3px}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px}
+.icon-btn{background:none;color:var(--muted);font-size:22px;padding:6px 8px;line-height:1}
+.primary{background:var(--accent);color:var(--accent-ink);font-weight:600;
+  padding:14px 20px;width:100%;font-size:16px}
+.primary:disabled{opacity:.45}
+.ghost{background:var(--quote);color:var(--ink);padding:11px 16px;font-size:14px}
+textarea,input[type=text],input[type=password],select{
+  width:100%;font:inherit;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);border-radius:14px;padding:13px 15px;resize:none}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:18px;box-shadow:var(--shadow)}
+.hide{display:none!important}
+label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.6}
+a{color:var(--accent)}
+#q{min-height:82px;font-size:16px;margin-bottom:12px}
+.examples{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+.chip{background:var(--quote);color:var(--muted);border:1px solid var(--line);
+  padding:7px 12px;border-radius:999px;font-size:13px}
+#answer{margin-top:26px}
+.answer-body{white-space:pre-wrap;font-size:16.5px;line-height:1.85}
+.answer-body strong{color:var(--accent)}
+.qnorm{font-size:12.5px;color:var(--muted);margin-bottom:14px}
+.cite{display:inline-block;background:var(--accent);color:var(--accent-ink);
+  font-size:11px;font-weight:700;min-width:19px;height:19px;line-height:19px;
+  text-align:center;border-radius:5px;margin:0 2px;vertical-align:1px;
+  text-decoration:none;padding:0 4px}
+h2.sec{font-size:13px;color:var(--muted);font-weight:600;margin:30px 0 12px;
+  letter-spacing:.06em;display:flex;align-items:center;gap:10px}
+h2.sec::after{content:"";flex:1;height:1px;background:var(--line)}
+.src{border:1px solid var(--line);border-radius:14px;padding:15px 16px;
+  margin-bottom:11px;background:var(--panel)}
+.src:target{outline:2px solid var(--accent)}
+.src .n{display:inline-block;background:var(--quote);color:var(--muted);font-size:11px;
+  font-weight:700;padding:2px 7px;border-radius:5px;margin-bottom:9px}
+.src blockquote{margin:0 0 11px;padding-left:12px;border-left:3px solid var(--line);
+  font-size:14.5px;line-height:1.75}
+.src .bk{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;
+  gap:10px;align-items:baseline;flex-wrap:wrap}
+.src .bk b{color:var(--ink);font-weight:600}
+.src .open{white-space:nowrap;font-size:12.5px;text-decoration:none}
+.status{color:var(--muted);font-size:14px;display:flex;align-items:center;gap:10px;padding:6px 0}
+.spinner{width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:10px}
+.bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+.err{color:var(--danger);font-size:14px;margin-top:12px;line-height:1.6}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;
+  z-index:50;backdrop-filter:blur(2px)}
+.sheet>div{background:var(--bg);width:100%;max-height:88vh;overflow:auto;
+  border-radius:20px 20px 0 0;padding:22px 18px calc(28px + env(safe-area-inset-bottom));
+  max-width:720px;margin:0 auto}
+.sheet h3{margin:0 0 4px;font-size:17px}
+.row{display:flex;gap:10px;margin-top:18px}
+.row>*{flex:1}
+.steps{margin:16px 0 0;padding:0;list-style:none;font-size:14px}
+.steps li{display:flex;gap:10px;padding:7px 0;color:var(--muted)}
+.steps li b{color:var(--ink);font-weight:600}
+.steps .mark{width:20px;flex:none;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1><span class="dot"></span>本に聞く</h1>
+      <div class="sub" id="libinfo">読んだ本のハイライトから答えを探す</div>
+    </div>
+    <button class="icon-btn" id="btn-settings" aria-label="設定">⚙</button>
+  </header>
+
+  <!-- ── 初回セットアップ ── -->
+  <section id="lock" class="card hide">
+    <h3 style="margin:0 0 6px;font-size:16px">書庫をひらく</h3>
+    <p class="hint">この端末で初めて使うときだけ準備が要ります。次回からは何も入力せずに使えます。</p>
+    <ul class="steps">
+      <li><span class="mark" id="m1">1</span><span><b>蔵書データ</b> 約 7MB</span></li>
+      <li><span class="mark" id="m2">2</span><span><b>ことばを読む AI</b> 約 118MB（以後この端末の中だけで動きます）</span></li>
+    </ul>
+    <label for="pass">合い言葉</label>
+    <input type="password" id="pass" autocomplete="current-password" enterkeyhint="go">
+    <div class="row"><button class="primary" id="btn-unlock">準備する</button></div>
+    <div id="lock-status"></div>
+  </section>
+
+  <!-- ── 検索 ── -->
+  <section id="main" class="hide">
+    <textarea id="q" enterkeyhint="search"
+      placeholder="いま困っていることを、そのまま書いてください&#10;例) はなしかたでない悩んでいる"></textarea>
+    <button class="primary" id="btn-ask">本に聞く</button>
+    <div class="examples" id="examples"></div>
+    <div id="answer"></div>
+  </section>
+
+</div>
+
+<!-- ── 設定 ── -->
+<div class="sheet hide" id="settings">
+  <div>
+    <h3>設定</h3>
+    <p class="hint">API キーはこの端末の中だけに保存されます。</p>
+
+    <label for="apikey">Gemini API キー</label>
+    <input type="password" id="apikey" placeholder="AIza…" autocomplete="off">
+    <p class="hint" style="margin-top:7px">
+      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>
+      で無料で取得できます。検索そのものは端末内で完結し、キーは
+      「相談文の整理」と「答えの文章化」にだけ使います。
+    </p>
+
+    <label for="model">答えを書くモデル</label>
+    <select id="model">
+      <option value="gemini-flash-latest">gemini-flash-latest（推奨）</option>
+      <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+      <option value="gemini-flash-lite-latest">gemini-flash-lite-latest（軽い）</option>
+      <option value="gemini-pro-latest">gemini-pro-latest（賢いが枠が小さい）</option>
+    </select>
+    <p class="hint" style="margin-top:7px">無料枠に当たったら自動で他のモデルに切り替えます。</p>
+
+    <div class="row">
+      <button class="ghost" id="btn-close">閉じる</button>
+      <button class="primary" id="btn-save">保存</button>
+    </div>
+    <div class="row">
+      <button class="ghost" id="btn-reset" style="color:var(--danger)">蔵書データを削除して入れ直す</button>
+    </div>
+    <p class="hint" id="storeinfo" style="margin-top:14px"></p>
+  </div>
+</div>
+
+<script type="module">
+'use strict';
+
+/* ═══════════ 設定値 ═══════════
+   埋め込みは Mac 側 (build_index.py) と完全に揃える必要がある。
+   モデル・dtype・接頭辞のどれか一つでもズレると検索結果が壊れる。 */
+const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+const EMBED_MODEL  = 'Xenova/multilingual-e5-small';
+const EMBED_DTYPE  = 'q8';          // build_index.py の model_quantized.onnx と同じ
+const QUERY_PREFIX = 'query: ';     // e5 の作法。文書側は "passage: "
+const DIM = 384;
+
+const ENC_URL  = 'index.enc';
+const MAGIC    = 'KOR1';
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const DB_NAME  = 'kindle-oracle';
+const STORE    = 'index';
+
+const TOP_K    = 24;   // LLM に渡すハイライト数
+const PER_BOOK = 3;    // 1 冊から採る上限 (同じ本ばかりになるのを防ぐ)
+const CAND     = 200;  // 多様化する前に確保する候補数
+
+const MODEL_FALLBACKS = ['gemini-flash-latest','gemini-2.5-flash',
+                         'gemini-flash-lite-latest','gemini-2.5-flash-lite'];
+
+const EXAMPLES = ['はなしかたでない悩んでいる','人前で緊張する','お金が貯まらない',
+                  '朝おきられない','人間関係がしんどい','集中力が続かない'];
+
+let IDX = null;        // {vectors:Int8Array, items, books, dim, count}
+let extractor = null;  // Transformers.js のパイプライン
+
+/* ═══════════ 小道具 ═══════════ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function setStatus(el, html, spin) {
+  el.innerHTML = html
+    ? `<div class="status">${spin ? '<span class="spinner"></span>' : ''}<span class="stxt">${html}</span></div>`
+    : '';
+}
+const setText = (el, t) => { const s = el.querySelector('.stxt'); if (s) s.textContent = t; };
+const setError = (el, msg) => { el.innerHTML = `<div class="err">${esc(msg)}</div>`; };
+
+/* ═══════════ IndexedDB ═══════════ */
+function idb(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(DB_NAME, 1);
+    open.onupgradeneeded = () => open.result.createObjectStore(STORE);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction(STORE, mode);
+      const req = fn(tx.objectStore(STORE));
+      tx.oncomplete = () => { db.close(); resolve(req && req.result); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    };
+  });
+}
+const dbGet   = k => idb('readonly',  s => s.get(k));
+const dbPut   = (k, v) => idb('readwrite', s => s.put(v, k));
+const dbClear = () => idb('readwrite', s => s.clear());
+
+/* ═══════════ 蔵書の取得と復号 ═══════════ */
+async function fetchWithProgress(url, onProgress) {
+  const res = await fetch(url, {cache:'no-store'});
+  if (!res.ok) throw new Error(`蔵書データを取得できません (HTTP ${res.status})`);
+  const total = +res.headers.get('content-length') || 0;
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length;
+    onProgress(got, total);
+  }
+  const out = new Uint8Array(got);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+async function gunzip(bytes) {
+  const stream = new Blob([bytes]).stream()
+    .pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function decryptIndex(blob, passphrase, onStage) {
+  if (new TextDecoder().decode(blob.slice(0, 4)) !== MAGIC)
+    throw new Error('蔵書ファイルの形式が違います');
+  if (blob[4] !== 1) throw new Error('蔵書ファイルの版が違います');
+
+  const dv = new DataView(blob.buffer, blob.byteOffset);
+  const iterations = dv.getUint32(5, true);
+  const salt = blob.slice(9, 25), iv = blob.slice(25, 37), ct = blob.slice(37);
+
+  onStage('鍵をつくっています…');
+  const base = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt, iterations, hash:'SHA-256'},
+    base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+
+  onStage('ひらいています…');
+  let plain;
+  try {
+    plain = new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, ct));
+  } catch { throw new Error('合い言葉が違うようです'); }
+
+  onStage('本棚に並べています…');
+  const metaLen = new DataView(plain.buffer, plain.byteOffset).getUint32(0, true);
+  const meta = JSON.parse(new TextDecoder().decode(
+    await gunzip(plain.slice(4, 4 + metaLen))));
+  const vectors = new Int8Array(plain.slice(4 + metaLen).buffer.slice(0));
+
+  if (vectors.length !== meta.count * meta.dim)
+    throw new Error('蔵書データが壊れています');
+  if (meta.dim !== DIM)
+    throw new Error(`次元が合いません (${meta.dim} ≠ ${DIM})。蔵書を作り直してください`);
+  return {vectors, items: meta.items, books: meta.books,
+          dim: meta.dim, count: meta.count};
+}
+
+/* ═══════════ 埋め込み (端末内) ═══════════ */
+async function loadExtractor(onProgress) {
+  if (extractor) return extractor;
+  const {pipeline, env} = await import(TRANSFORMERS_URL);
+  env.allowLocalModels = false;   // HuggingFace から取得する
+  extractor = await pipeline('feature-extraction', EMBED_MODEL, {
+    dtype: EMBED_DTYPE,
+    progress_callback: p => {
+      if (p.status === 'progress' && p.total)
+        onProgress(p.loaded / p.total, p.file);
+    }
+  });
+  return extractor;
+}
+
+async function embedQuery(text) {
+  const ex = await loadExtractor(() => {});
+  // Mac 側と同じ mean pooling + L2 正規化
+  const out = await ex(QUERY_PREFIX + text, {pooling:'mean', normalize:true});
+  const v = out.data;
+  const q = new Int8Array(DIM);
+  for (let i = 0; i < DIM; i++)
+    q[i] = Math.max(-127, Math.min(127, Math.round(v[i] * 127)));
+  return q;
+}
+
+/* ═══════════ ベクトル検索 ═══════════ */
+function search(qvec) {
+  const {vectors, count, dim} = IDX;
+  // 上位 CAND 件だけ保てばよいので、最小スコアを閾値にして挿入していく
+  const bestScore = new Int32Array(CAND).fill(-2147483648);
+  const bestIdx   = new Int32Array(CAND).fill(-1);
+  let floor = -2147483648, size = 0;
+
+  for (let i = 0; i < count; i++) {
+    const off = i * dim;
+    let s = 0;
+    for (let d = 0; d < dim; d++) s += qvec[d] * vectors[off + d];
+    if (size === CAND && s <= floor) continue;
+    let p = size < CAND ? size++ : CAND - 1;
+    while (p > 0 && bestScore[p - 1] < s) {
+      bestScore[p] = bestScore[p - 1]; bestIdx[p] = bestIdx[p - 1]; p--;
+    }
+    bestScore[p] = s; bestIdx[p] = i;
+    floor = bestScore[size - 1];
+  }
+
+  // 同じ本ばかりにならないよう 1 冊 PER_BOOK 件までに間引く
+  const perBook = new Map();
+  const picked = [];
+  for (let r = 0; r < size && picked.length < TOP_K; r++) {
+    const idx = bestIdx[r];
+    const b = IDX.items[idx].b;
+    const n = perBook.get(b) || 0;
+    if (n >= PER_BOOK) continue;
+    perBook.set(b, n + 1);
+    picked.push({idx, score: bestScore[r] / (127 * 127)});
+  }
+  return picked;
+}
+
+/* ═══════════ Gemini ═══════════ */
+function apiKey() {
+  const k = localStorage.getItem('geminiApiKey');
+  if (!k) throw new Error('Gemini の API キーが未設定です。右上の ⚙ から登録してください。');
+  return k;
+}
+
+async function gemini(model, prompt, maxTokens) {
+  const res = await fetch(`${API_BASE}/models/${model}:generateContent`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-goog-api-key':apiKey()},
+    body: JSON.stringify({
+      contents:[{parts:[{text: prompt}]}],
+      generationConfig:{
+        temperature:0.4,
+        maxOutputTokens:maxTokens,
+        // flash 系は既定で思考が有効。その分が出力枠から引かれて
+        // 本文が途中で切れるため明示的に切る。
+        thinkingConfig:{thinkingBudget:0}
+      }
+    })
+  });
+  if (!res.ok) {
+    const err = new Error((await res.text()).slice(0, 300));
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  const cand = data.candidates && data.candidates[0];
+  const parts = cand && cand.content && cand.content.parts;
+  return parts ? parts.map(p => p.text || '').join('').trim() : '';
+}
+
+async function generate(prompt, maxTokens) {
+  const pref = localStorage.getItem('geminiModel') || MODEL_FALLBACKS[0];
+  const order = [pref, ...MODEL_FALLBACKS.filter(m => m !== pref)];
+  let last;
+  for (const model of order) {
+    try {
+      const text = await gemini(model, prompt, maxTokens);
+      if (text) return {text, model};
+      last = new Error('モデルが空の回答を返しました');
+    } catch (e) {
+      last = e;
+      if (e.status !== 429 && e.status !== 503) throw e;  // 枠切れ以外は即諦める
+    }
+  }
+  throw last;
+}
+
+/* ═══════════ プロンプト ═══════════ */
+const normalizePrompt = q => `\
+次の相談文を、書籍のハイライト検索に使う検索クエリに書き換えてください。
+
+- 話し言葉・誤字・崩れた文法を、自然な書き言葉に直す
+- 相談の核心を表す語を 2〜4 語おぎなう（同義語や上位概念）
+- 出力は検索クエリ 1 行のみ。説明・記号・鉤括弧は付けない
+- 40 字程度に収める
+
+相談: ${q}`;
+
+function answerPrompt(query, hits) {
+  const lines = hits.map((h, i) => {
+    const it = IDX.items[h.idx], bk = IDX.books[it.b];
+    return `[${i + 1}] 『${bk.t}』${bk.a ? ' ' + bk.a : ''}\n${it.t}`;
+  }).join('\n\n');
+
+  return `\
+あなたは、相談者本人が過去に読んで線を引いた本のハイライトだけを手がかりに、\
+悩みへの具体的な打ち手を示すアシスタントです。
+
+# 絶対に守ること
+- 下の「ハイライト」に書かれている内容だけを根拠にする。一般論で埋めない。
+- 主張のたびに、根拠にしたハイライトの番号を [1] [3] のように必ず書く。
+- 悩みに本当に効くハイライトが無いときは、無理に答えを作らず「今の蔵書には\
+ぴったりの箇所が見当たらない」と正直に言い、いちばん近い箇所だけを紹介する。
+- 相談者は iPhone の小さい画面で読む。前置き・お世辞・繰り返しは書かない。
+
+# 出力の形
+1 行目: 相談の要点を 1 文で言い換える
+空行のあと: 打ち手を最大 3 つ。各項目は「**見出し**」で始め、2〜3 文。出典番号つき。
+最後: 「今日やること: 」で始まる 1 行。すぐ実行できる小さな行動をひとつだけ。
+
+# 相談
+${query}
+
+# ハイライト
+${lines}`;
+}
+
+/* ═══════════ 描画 ═══════════ */
+function renderAnswer(text, hits, model, normalized) {
+  const html = esc(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[(\d{1,2})\]/g, (m, n) => {
+      const i = +n;
+      return (i >= 1 && i <= hits.length)
+        ? `<a class="cite" href="#src${i}">${i}</a>` : m;
+    });
+
+  const cards = hits.map((h, i) => {
+    const it = IDX.items[h.idx], bk = IDX.books[it.b];
+    const link = bk.s
+      ? `kindle://book?action=open&asin=${encodeURIComponent(bk.s)}&location=${it.l}`
+      : null;
+    return `<div class="src" id="src${i + 1}">
+      <span class="n">${i + 1}</span>
+      <blockquote>${esc(it.t)}</blockquote>
+      <div class="bk">
+        <span><b>${esc(bk.t)}</b>${bk.a ? ' / ' + esc(bk.a) : ''}</span>
+        ${link ? `<a class="open" href="${link}">Kindleで開く →</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  $('#answer').innerHTML = `
+    ${normalized ? `<div class="qnorm">検索した言葉: ${esc(normalized)}</div>` : ''}
+    <div class="answer-body">${html}</div>
+    <h2 class="sec">引いた線 ${hits.length} 件</h2>
+    ${cards}
+    <p class="hint" style="margin-top:18px">${esc(model)} が
+      ${IDX.count.toLocaleString()} 件のハイライトから選びました</p>`;
+}
+
+/* ═══════════ 動作 ═══════════ */
+async function doUnlock() {
+  const pass = $('#pass').value;
+  const st = $('#lock-status');
+  if (!pass) return setError(st, '合い言葉を入れてください');
+  $('#btn-unlock').disabled = true;
+
+  try {
+    // 1. 蔵書
+    setStatus(st, '蔵書をダウンロードしています…', true);
+    st.insertAdjacentHTML('beforeend', '<div class="bar"><i id="dlbar"></i></div>');
+    const blob = await fetchWithProgress(ENC_URL, (got, total) => {
+      const bar = $('#dlbar');
+      if (bar && total) bar.style.width = (got / total * 100) + '%';
+      setText(st, `蔵書をダウンロード中 ${(got / 1e6).toFixed(1)}`
+        + (total ? ` / ${(total / 1e6).toFixed(1)}` : '') + ' MB');
+    });
+    const idx = await decryptIndex(blob, pass, m => {
+      setStatus(st, m, true);
+      st.insertAdjacentHTML('beforeend', '<div class="bar"><i style="width:100%"></i></div>');
+    });
+    await dbPut('data', idx);
+    IDX = idx;
+    $('#m1').textContent = '✓';
+
+    // 2. 埋め込みモデル (以後この端末の中だけで動く)
+    setStatus(st, 'ことばを読む AI を用意しています…', true);
+    st.insertAdjacentHTML('beforeend', '<div class="bar"><i id="mdlbar"></i></div>');
+    await loadExtractor(ratio => {
+      const bar = $('#mdlbar');
+      if (bar) bar.style.width = (ratio * 100) + '%';
+      setText(st, `AI を準備中 ${Math.round(ratio * 100)}%（約 118MB・初回だけ）`);
+    });
+    $('#m2').textContent = '✓';
+
+    setStatus(st, '');
+    showMain();
+  } catch (e) {
+    setError(st, e.message);
+  } finally {
+    $('#btn-unlock').disabled = false;
+  }
+}
+
+async function doAsk() {
+  const raw = $('#q').value.trim();
+  const box = $('#answer');
+  if (!raw) return;
+  $('#btn-ask').disabled = true;
+  box.innerHTML = '';
+
+  try {
+    apiKey();   // 未設定ならここで止める
+
+    // 1. 相談文を検索向けに整える。e5 は崩れた口語に弱いのでこれが効く。
+    //    枠切れなどで失敗しても、生の文のまま検索は続ける。
+    setStatus(box, '相談を読みといています…', true);
+    let normalized = null;
+    try {
+      const r = await generate(normalizePrompt(raw), 200);
+      normalized = r.text.split('\n')[0].replace(/^[「"']|["'」]$/g, '').trim();
+    } catch (e) {
+      if (e.status !== 429 && e.status !== 503) throw e;
+    }
+    const query = normalized || raw;
+
+    // 2. 端末内で検索
+    setStatus(box, `${IDX.count.toLocaleString()} 件のハイライトを探しています…`, true);
+    const qvec = await embedQuery(query);
+    await new Promise(r => setTimeout(r, 0));   // 表示を先に反映させる
+    const hits = search(qvec);
+    if (!hits.length) throw new Error('該当するハイライトが見つかりませんでした');
+
+    // 3. 本の言葉だけで答えを組み立てる
+    setStatus(box, '本の言葉から答えを組み立てています…', true);
+    const {text, model} = await generate(answerPrompt(raw, hits), 2048);
+    renderAnswer(text, hits, model, normalized);
+  } catch (e) {
+    let msg = e.message;
+    if (e.status === 429)
+      msg = '今日の無料枠を使い切ったようです。時間をおくか、⚙ から別のモデルを選んでください。';
+    else if (e.status === 400 && /API[_ ]?key/i.test(msg))
+      msg = 'API キーが正しくないようです。⚙ から確認してください。';
+    setError(box, msg);
+  } finally {
+    $('#btn-ask').disabled = false;
+  }
+}
+
+/* ═══════════ 画面 ═══════════ */
+function showMain() {
+  $('#lock').classList.add('hide');
+  $('#main').classList.remove('hide');
+  $('#libinfo').textContent =
+    `${IDX.books.length} 冊 / ${IDX.count.toLocaleString()} ハイライト`;
+}
+function showLock() {
+  $('#main').classList.add('hide');
+  $('#lock').classList.remove('hide');
+}
+
+async function init() {
+  $('#examples').innerHTML =
+    EXAMPLES.map(t => `<button class="chip">${esc(t)}</button>`).join('');
+  $('#examples').addEventListener('click', e => {
+    if (!e.target.classList.contains('chip')) return;
+    $('#q').value = e.target.textContent;
+    doAsk();
+  });
+
+  $('#btn-unlock').onclick = doUnlock;
+  $('#pass').addEventListener('keydown', e => { if (e.key === 'Enter') doUnlock(); });
+  $('#btn-ask').onclick = doAsk;
+  $('#q').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doAsk();
+  });
+
+  $('#btn-settings').onclick = () => {
+    $('#apikey').value = localStorage.getItem('geminiApiKey') || '';
+    $('#model').value = localStorage.getItem('geminiModel') || MODEL_FALLBACKS[0];
+    $('#storeinfo').textContent = IDX
+      ? `取り込み済み: ${IDX.books.length} 冊 / ${IDX.count.toLocaleString()} ハイライト`
+      : '蔵書は未取り込みです';
+    $('#settings').classList.remove('hide');
+  };
+  $('#btn-close').onclick = () => $('#settings').classList.add('hide');
+  $('#btn-save').onclick = () => {
+    const k = $('#apikey').value.trim();
+    if (k) localStorage.setItem('geminiApiKey', k);
+    else localStorage.removeItem('geminiApiKey');
+    localStorage.setItem('geminiModel', $('#model').value);
+    $('#settings').classList.add('hide');
+  };
+  $('#btn-reset').onclick = async () => {
+    if (!confirm('この端末から蔵書データを消します。もう一度合い言葉が要ります。')) return;
+    await dbClear();
+    IDX = null;
+    $('#settings').classList.add('hide');
+    $('#answer').innerHTML = '';
+    $('#m1').textContent = '1';
+    $('#libinfo').textContent = '読んだ本のハイライトから答えを探す';
+    showLock();
+  };
+
+  try {
+    const saved = await dbGet('data');
+    if (saved && saved.vectors && saved.vectors.length) { IDX = saved; showMain(); }
+    else showLock();
+  } catch { showLock(); }
+
+  if ('serviceWorker' in navigator)
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+
+  // Mac 側 (search.py) と結果が食い違うときの突き合わせ用。
+  // ブラウザと Python で同じベクトルが出ることがこのアプリの前提なので、
+  // 疑わしいときは両方で同じクエリを埋め込んで見比べる。
+  window.__kindleOracle = {embedQuery, search, get index() { return IDX; }};
+}
+
+init();
+</script>
+</body>
+</html>

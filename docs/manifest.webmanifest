@@ -1,0 +1,17 @@
+{
+  "name": "本に聞く — Kindleハイライト検索",
+  "short_name": "本に聞く",
+  "description": "これまで読んだ本のハイライトから、いまの悩みへの答えを探す",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf9f7",
+  "theme_color": "#9a6b3f",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
