@@ -14,3 +14,9 @@ __pycache__/
 .env
 build.log
 .DS_Store
+
+# 自動更新の作業ファイル
+auto_update.log
+.last_highlights_hash
+.kindle_state.json
+fetch.log

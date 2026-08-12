@@ -124,8 +124,10 @@ def main() -> None:
             print(f"     — 『{book['t'][:44]}』\n")
         return
 
+    # 自分で書いたメモは本文より本人の関心に近いので、根拠として明示する
     lines = "\n\n".join(
         f"[{i}] 『{book['t']}』{' ' + book['a'] if book['a'] else ''}\n{item['t']}"
+        + (f"\n（このとき自分で書いたメモ）{item['n']}" if item.get("n") else "")
         for i, (_, item, book) in enumerate(hits, 1))
     answer, model = generate(ANSWER_PROMPT.format(query=raw, highlights=lines))
 

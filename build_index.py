@@ -36,6 +36,13 @@ MAX_LEN = 512
 PASSAGE_PREFIX = "passage: "
 
 
+def passage_text(rec: dict) -> str:
+    """埋め込みに掛ける文。自分で書いたメモは本文と同じくらい手がかりになるので
+    ハイライトに続けて混ぜる。表示は meta.json 側で分けて持つ。"""
+    note = rec.get("note")
+    return f"{rec['text']} 【メモ】{note}" if note else rec["text"]
+
+
 def load_session(threads: int) -> ort.InferenceSession:
     opts = ort.SessionOptions()
     opts.intra_op_num_threads = threads
@@ -91,7 +98,7 @@ def main() -> None:
     print(f"{len(records)} 件を {DIM} 次元に埋め込む")
     t0 = time.time()
 
-    encodings = tok.encode_batch([PASSAGE_PREFIX + r["text"] for r in records])
+    encodings = tok.encode_batch([PASSAGE_PREFIX + passage_text(r) for r in records])
 
     # パディングを減らすため長さ順に処理する。結果は元の並びに戻す。
     order = sorted(range(len(encodings)), key=lambda i: len(encodings[i].ids))
@@ -122,8 +129,12 @@ def main() -> None:
         if key not in book_idx:
             book_idx[key] = len(books)
             books.append({"t": r["title"], "a": r["author"], "s": r["asin"]})
-        items.append({"t": r["text"], "b": book_idx[key], "l": r["loc"]})
+        item = {"t": r["text"], "b": book_idx[key], "l": r["loc"]}
+        if r.get("note"):
+            item["n"] = r["note"]
+        items.append(item)
 
+    notes = sum(1 for it in items if "n" in it)
     meta = {"dim": DIM, "count": len(records), "model": "multilingual-e5-small-q8",
             "books": books, "items": items}
     (HERE / "meta.json").write_text(
@@ -131,7 +142,7 @@ def main() -> None:
 
     print(f"\nvectors.i8 : {(HERE / 'vectors.i8').stat().st_size / 1e6:.1f} MB")
     print(f"meta.json  : {(HERE / 'meta.json').stat().st_size / 1e6:.1f} MB "
-          f"({len(books)} 冊)")
+          f"({len(books)} 冊 / メモ付き {notes} 件)")
     print(f"所要        : {(time.time() - t0) / 60:.1f} 分")
 
 
