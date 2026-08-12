@@ -41,19 +41,65 @@ GitHub Pages は private リポジトリでも URL 自体は公開されるた�
 2 回目からは開いてすぐ使える。検索そのものはオフラインでも動く
 （①③ の文章化だけネットが要る）。
 
-## 作り直す（Mac）
+## 自動更新（毎朝 7:00）
 
-新しく本を読んでハイライトが増えたら、この 4 つを順に実行する。
+読んだ本が自動で蔵書に入る。`launchd` が `auto_update.sh` を呼び、
+
+1. Amazon の notebook からハイライトとメモを取る
+2. 前回と同じなら、ここで打ち切る
+3. 増えていれば 埋め込み → 暗号化 → push
+4. 終わったら通知
+
+**Obsidian は経由しない。** プラグインは同期を手で起こさないと動かず、
+実際 6 週間分（26 冊）が抜けたまま止まっていた。web を見れば常に最新で、
+Obsidian の md には入らないメモも取れる。
+
+各本の「最後に線を引いた日」を `.kindle_state.json` に覚えておき、
+変わった本だけ取り直す。全冊なめると 20 分かかるが、差分なら 1 分で済む。
+
+最初に一度だけ、2 つ準備する。
 
 ```bash
-cd /Users/home_dir/gemini_cli/tools/kindle_oracle
-.venv/bin/python parse_highlights.py    # Obsidian → highlights.jsonl
-.venv/bin/python build_index.py         # 埋め込み（約 1.2 分）
-KINDLE_ORACLE_PASSPHRASE='合い言葉' .venv/bin/python pack.py
-git -C docs add -A && git commit -m "蔵書を更新" && git push
+.venv/bin/python kindle_login.py                 # Amazon にログイン
+security add-generic-password -a "$USER" \
+         -s kindle-oracle-passphrase -w          # 合い言葉を預ける
 ```
 
+ログインはブラウザの窓が開くので、そこで自分で入る。パスワードはスクリプトを
+通らない。合い言葉をキーチェーンに預けるのは、自動実行では対話入力ができないため。
+
+登録と解除:
+
+```bash
+cp com.mifune.kindle-oracle.plist ~/Library/LaunchAgents/
+launchctl load  ~/Library/LaunchAgents/com.mifune.kindle-oracle.plist
+launchctl unload ~/Library/LaunchAgents/com.mifune.kindle-oracle.plist   # やめるとき
+```
+
+手で走らせるとき、様子を見るとき:
+
+```bash
+./auto_update.sh            # 変わった本だけ取り直す
+./auto_update.sh --full     # 全冊を取り直す
+tail -f auto_update.log     # 経過
+```
+
+Amazon のログインが切れると取得できない。そのときは通知が出るので
+`kindle_login.py` をもう一度実行する。
+
 iPhone 側は ⚙ →「蔵書データを削除して入れ直す」で新しい版を取り込む。
+
+## 手で作り直す
+
+```bash
+.venv/bin/python fetch_kindle_web.py    # Amazon → highlights.jsonl
+.venv/bin/python build_index.py         # 埋め込み（約 1.2 分）
+.venv/bin/python pack.py                # 合い言葉を聞かれる
+git add docs && git commit -m "蔵書を更新" && git push
+```
+
+`parse_highlights.py` は Obsidian の md から読む旧経路。web が使えないときの
+予備として残してあるが、メモは取れないし中身も古い。
 
 ## 手元で確かめる
 

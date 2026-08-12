@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from tokenizers import Tokenizer
 
-from build_index import (DIM, MAX_LEN, TOKENIZER_PATH, encode_batch,
+from build_index import (DIM, MAX_LEN, TOKENIZER_PATH, encode_batch,  # noqa: F401
                          load_session)
 
 HERE = Path(__file__).parent

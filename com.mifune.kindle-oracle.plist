@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mifune.kindle-oracle</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/home_dir/gemini_cli/tools/kindle_oracle/auto_update.sh</string>
+  </array>
+
+  <!-- 毎朝 7:00。Mac が寝ていた場合は起きたあとに実行される。 -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>7</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <!-- launchd の PATH は最小限。git は homebrew 側にあるので明示する。 -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/home_dir/gemini_cli/tools/kindle_oracle</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/home_dir/gemini_cli/tools/kindle_oracle/auto_update.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/home_dir/gemini_cli/tools/kindle_oracle/auto_update.log</string>
+
+  <!-- 読み込んだ瞬間に走らせない。初回は手で確かめてから。 -->
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
