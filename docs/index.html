@@ -76,6 +76,10 @@ h2.sec::after{content:"";flex:1;height:1px;background:var(--line)}
   font-weight:700;padding:2px 7px;border-radius:5px;margin-bottom:9px}
 .src blockquote{margin:0 0 11px;padding-left:12px;border-left:3px solid var(--line);
   font-size:14.5px;line-height:1.75}
+.src .note{background:var(--quote);border-radius:10px;padding:10px 12px;
+  margin:0 0 11px;font-size:14px;line-height:1.7}
+.src .note>span{display:block;font-size:10.5px;font-weight:700;color:var(--accent);
+  letter-spacing:.08em;margin-bottom:3px}
 .src .bk{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;
   gap:10px;align-items:baseline;flex-wrap:wrap}
 .src .bk b{color:var(--ink);font-weight:600}
@@ -484,7 +488,9 @@ const normalizePrompt = q => `\
 function answerPrompt(query, hits) {
   const lines = hits.map((h, i) => {
     const it = IDX.items[h.idx], bk = IDX.books[it.b];
-    return `[${i + 1}] 『${bk.t}』${bk.a ? ' ' + bk.a : ''}\n${it.t}`;
+    // 自分で書いたメモは本文より本人の関心に近いので、根拠として明示する
+    return `[${i + 1}] 『${bk.t}』${bk.a ? ' ' + bk.a : ''}\n${it.t}`
+         + (it.n ? `\n（このとき自分で書いたメモ）${it.n}` : '');
   }).join('\n\n');
 
   return `\
@@ -522,6 +528,7 @@ function renderSources(hits, normalized) {
     return `<div class="src" id="src${i + 1}">
       <span class="n">${i + 1}</span>
       <blockquote>${esc(it.t)}</blockquote>
+      ${it.n ? `<div class="note"><span>メモ</span>${esc(it.n)}</div>` : ''}
       <div class="bk">
         <span><b>${esc(bk.t)}</b>${bk.a ? ' / ' + esc(bk.a) : ''}</span>
         ${link ? `<a class="open" href="${link}">Kindleで開く →</a>` : ''}
