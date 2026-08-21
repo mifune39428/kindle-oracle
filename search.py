@@ -72,9 +72,13 @@ def main() -> None:
 
     print(f"Q: {query}\n" + "=" * 72)
     for rank, (score, item, book) in enumerate(search(query, args.n), 1):
-        text = item["t"][:100]
+        text = item["t"][:100].replace("\n", " ")
         print(f"{rank:2d}. [{score:.3f}] {text}…")
-        print(f"     — 『{book['t'][:46]}』{book['a'][:22]}\n")
+        if book.get("k") == "a":   # 自分の記事
+            print(f"     — 自分の記事「{book['t'][:44]}」{book.get('d', '')} "
+                  f"{book['a']}\n")
+        else:
+            print(f"     — 『{book['t'][:46]}』{book['a'][:22]}\n")
 
 
 if __name__ == "__main__":

@@ -10,15 +10,20 @@ e5 系は接頭辞が必須:
     文書側 = "passage: ...", 質問側 = "query: ..."
 PWA 側の QUERY_PREFIX と必ず対で変えること。
 
+本のハイライトに加えて、自分の記事（personal_ai/corpus/articles）も同じ索引に入れる。
+出典テーブル(books)は本と記事の両方を持ち、記事には url と日付が付く（k="a"）。
+
 出力:
   vectors.i8   int8 × 件数 × 384
-  meta.json    本文・書名・著者・ASIN・location
+  meta.json    本文・書名・著者・ASIN・location（記事は url・date・見出し）
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -38,7 +43,12 @@ PASSAGE_PREFIX = "passage: "
 
 def passage_text(rec: dict) -> str:
     """埋め込みに掛ける文。自分で書いたメモは本文と同じくらい手がかりになるので
-    ハイライトに続けて混ぜる。表示は meta.json 側で分けて持つ。"""
+    ハイライトに続けて混ぜる。表示は meta.json 側で分けて持つ。
+
+    記事は塊だけだと何の話か分からなくなるので、題名と見出しを前に付ける。"""
+    if rec.get("kind") == "article":
+        head = rec.get("heading") or ""
+        return f"{rec['title']}｜{head} {rec['text']}" if head else f"{rec['title']} {rec['text']}"
     note = rec.get("note")
     return f"{rec['text']} 【メモ】{note}" if note else rec["text"]
 
@@ -80,6 +90,8 @@ def main() -> None:
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--threads", type=int, default=0, help="0 なら onnxruntime に任せる")
     ap.add_argument("--limit", type=int, help="先頭 N 件だけ (動作確認用)")
+    ap.add_argument("--no-articles", action="store_true",
+                    help="自分の記事を入れず、本のハイライトだけで作る")
     args = ap.parse_args()
 
     if not ONNX_PATH.exists():
@@ -90,6 +102,20 @@ def main() -> None:
                (HERE / "highlights.jsonl").read_text(encoding="utf-8").splitlines()]
     if args.limit:
         records = records[:args.limit]
+
+    articles: list[dict] = []
+    if not args.no_articles:
+        # 塊の切り方は personal_ai 側が持っている。ここに写すと片方だけ直って食い違うので借りる。
+        # **記事だけ**を借りること。Apple のメモとメール・予定は外に出さない。
+        personal_ai = os.path.join(os.path.dirname(str(HERE)), "personal_ai")
+        if personal_ai not in sys.path:
+            sys.path.insert(0, personal_ai)
+        import passages
+        articles = passages.load_articles()
+        if args.limit:
+            articles = articles[:args.limit]
+        print(f"本のハイライト {len(records)} 件＋自分の記事 {len(articles)} 塊")
+    records += articles
 
     tok = Tokenizer.from_file(str(TOKENIZER_PATH))
     tok.enable_truncation(max_length=MAX_LEN)
@@ -125,16 +151,26 @@ def main() -> None:
     book_idx: dict[str, int] = {}
     items = []
     for r in records:
-        key = r["asin"] or r["title"]
+        is_article = r.get("kind") == "article"
+        # 記事は url が一意。本は ASIN（無ければ書名）
+        key = (r.get("url") or r["title"]) if is_article else (r["asin"] or r["title"])
         if key not in book_idx:
             book_idx[key] = len(books)
-            books.append({"t": r["title"], "a": r["author"], "s": r["asin"]})
+            src = {"t": r["title"], "a": r["author"], "s": r.get("asin") or ""}
+            if is_article:
+                src["k"] = "a"                    # 出し分け用（a = 自分の記事）
+                src["u"] = r.get("url") or ""
+                src["d"] = r.get("date") or ""
+            books.append(src)
         item = {"t": r["text"], "b": book_idx[key], "l": r["loc"]}
         if r.get("note"):
             item["n"] = r["note"]
+        if is_article and r.get("heading"):
+            item["h"] = r["heading"]
         items.append(item)
 
     notes = sum(1 for it in items if "n" in it)
+    n_articles = sum(1 for b in books if b.get("k") == "a")
     meta = {"dim": DIM, "count": len(records), "model": "multilingual-e5-small-q8",
             "books": books, "items": items}
     (HERE / "meta.json").write_text(
@@ -142,7 +178,7 @@ def main() -> None:
 
     print(f"\nvectors.i8 : {(HERE / 'vectors.i8').stat().st_size / 1e6:.1f} MB")
     print(f"meta.json  : {(HERE / 'meta.json').stat().st_size / 1e6:.1f} MB "
-          f"({len(books)} 冊 / メモ付き {notes} 件)")
+          f"(本 {len(books) - n_articles} 冊 / 記事 {n_articles} 本 / メモ付き {notes} 件)")
     print(f"所要        : {(time.time() - t0) / 60:.1f} 分")
 
 
