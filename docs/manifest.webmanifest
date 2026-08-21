@@ -1,7 +1,7 @@
 {
-  "name": "みっふぃーAIに聞く — 読んだ本と自分の記事から探す",
+  "name": "みっふぃーAIに聞く — Kindleハイライト検索",
   "short_name": "みっふぃーAI",
-  "description": "これまで読んだ本のハイライトと、自分が書いた記事から、いまの悩みへの答えを探す",
+  "description": "これまで読んだ本のハイライトから、いまの悩みへの答えを探す",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
