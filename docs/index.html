@@ -58,6 +58,11 @@ a{color:var(--accent)}
 .examples{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
 .chip{background:var(--quote);color:var(--muted);border:1px solid var(--line);
   padding:7px 12px;border-radius:999px;font-size:13px}
+.scope{display:flex;gap:7px;margin-bottom:12px}
+.sc{flex:1;background:var(--quote);color:var(--muted);border:1px solid var(--line);
+  padding:8px 6px;border-radius:999px;font-size:13px}
+.sc.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.src .mine{color:var(--accent);font-weight:600}
 #answer{margin-top:26px}
 .answer-body{white-space:pre-wrap;font-size:16.5px;line-height:1.85}
 .answer-body strong{color:var(--accent)}
@@ -134,7 +139,12 @@ h2.sec::after{content:"";flex:1;height:1px;background:var(--line)}
   <section id="main" class="hide">
     <textarea id="q" enterkeyhint="search"
       placeholder="いま困っていることを、そのまま書いてください&#10;例) はなしかたでない悩んでいる"></textarea>
-    <button class="primary" id="btn-ask">本に聞く</button>
+    <div class="scope" id="scope">
+      <button class="sc on" data-scope="all">両方</button>
+      <button class="sc" data-scope="book">本だけ</button>
+      <button class="sc" data-scope="mine">自分の記事だけ</button>
+    </div>
+    <button class="primary" id="btn-ask">聞く</button>
     <div class="examples" id="examples"></div>
     <div id="answer"></div>
   </section>
@@ -214,8 +224,21 @@ const EXAMPLES = ['はなしかたでない悩んでいる','人前で緊張す�
                   '朝おきられない','人間関係がしんどい','集中力が続かない'];
 
 let IDX = null;              // {vectors:Int8Array, items, books, dim, count}
+let SCOPE = 'all';           // 探す範囲: all | book | mine
 let extractor = null;        // Transformers.js のパイプライン
 let loadingExtractor = null; // 読み込み中の約束。二重ロード防止
+
+/* 検索の内側で books を引き直すと遅いので、item ごとに
+   「自分の記事か」を 1 バイトで持っておく。索引を読んだ直後に一度だけ作る。 */
+function prepareIndex(idx) {
+  const art = new Uint8Array(idx.count);
+  for (let i = 0; i < idx.count; i++) {
+    const b = idx.books[idx.items[i].b];
+    art[i] = (b && b.k === 'a') ? 1 : 0;
+  }
+  idx.art = art;
+  return idx;
+}
 
 /* ═══════════ 小道具 ═══════════ */
 const $ = s => document.querySelector(s);
@@ -353,7 +376,13 @@ function search(qvec) {
   const bestIdx   = new Int32Array(CAND).fill(-1);
   let floor = -2147483648, size = 0;
 
+  const wantArticle = SCOPE === 'mine', onlyBook = SCOPE === 'book';
+  const art = IDX.art;
   for (let i = 0; i < count; i++) {
+    if (art) {
+      if (wantArticle && !art[i]) continue;
+      if (onlyBook && art[i]) continue;
+    }
     const off = i * dim;
     let s = 0;
     for (let d = 0; d < dim; d++) s += qvec[d] * vectors[off + d];
@@ -489,18 +518,24 @@ function answerPrompt(query, hits) {
   const lines = hits.map((h, i) => {
     const it = IDX.items[h.idx], bk = IDX.books[it.b];
     // 自分で書いたメモは本文より本人の関心に近いので、根拠として明示する
-    return `[${i + 1}] 『${bk.t}』${bk.a ? ' ' + bk.a : ''}\n${it.t}`
+    const head = bk.k === 'a'
+      ? `[${i + 1}] 自分の記事「${bk.t}」${bk.d ? ' ' + bk.d : ''}（${bk.a}）`
+      : `[${i + 1}] 『${bk.t}』${bk.a ? ' ' + bk.a : ''}`;
+    return `${head}\n${it.t}`
          + (it.n ? `\n（このとき自分で書いたメモ）${it.n}` : '');
   }).join('\n\n');
 
   return `\
-あなたは、相談者本人が過去に読んで線を引いた本のハイライトだけを手がかりに、\
+あなたは、相談者本人が過去に読んで線を引いた本のハイライトと、\
+相談者自身が過去に書いた記事だけを手がかりに、\
 悩みへの具体的な打ち手を示すアシスタントです。
 
 # 絶対に守ること
-- 下の「ハイライト」に書かれている内容だけを根拠にする。一般論で埋めない。
+- 下の「手がかり」に書かれている内容だけを根拠にする。一般論で埋めない。
+- 「自分の記事」は相談者自身が書いたもの。日付があるときは「2026-05-02 に自分で書いた\
+とおり」のように、いつの自分かが分かる形で引く。
 - 主張のたびに、根拠にしたハイライトの番号を [1] [3] のように必ず書く。
-- 悩みに本当に効くハイライトが無いときは、無理に答えを作らず「今の蔵書には\
+- 悩みに本当に効く手がかりが無いときは、無理に答えを作らず「今の蔵書には\
 ぴったりの箇所が見当たらない」と正直に言い、いちばん近い箇所だけを紹介する。
 - 相談者は iPhone の小さい画面で読む。前置き・お世辞・繰り返しは書かない。
 
@@ -512,7 +547,7 @@ function answerPrompt(query, hits) {
 # 相談
 ${query}
 
-# ハイライト
+# 手がかり
 ${lines}`;
 }
 
@@ -522,16 +557,20 @@ ${lines}`;
 function renderSources(hits, normalized) {
   const cards = hits.map((h, i) => {
     const it = IDX.items[h.idx], bk = IDX.books[it.b];
-    const link = bk.s
-      ? `kindle://book?action=open&asin=${encodeURIComponent(bk.s)}&location=${it.l}`
-      : null;
+    const mine = bk.k === 'a';
+    const link = mine
+      ? (bk.u || null)
+      : (bk.s ? `kindle://book?action=open&asin=${encodeURIComponent(bk.s)}&location=${it.l}` : null);
     return `<div class="src" id="src${i + 1}">
       <span class="n">${i + 1}</span>
       <blockquote>${esc(it.t)}</blockquote>
       ${it.n ? `<div class="note"><span>メモ</span>${esc(it.n)}</div>` : ''}
       <div class="bk">
-        <span><b>${esc(bk.t)}</b>${bk.a ? ' / ' + esc(bk.a) : ''}</span>
-        ${link ? `<a class="open" href="${link}">Kindleで開く →</a>` : ''}
+        <span>${mine ? '<span class="mine">自分の記事</span> ' : ''}<b>${esc(bk.t)}</b>${
+          mine ? (bk.d ? ' / ' + esc(bk.d) + ' ' + esc(bk.a) : ' / ' + esc(bk.a))
+               : (bk.a ? ' / ' + esc(bk.a) : '')}</span>
+        ${link ? `<a class="open" href="${link}"${mine ? ' target="_blank" rel="noopener"' : ''}>${
+          mine ? '記事を開く →' : 'Kindleで開く →'}</a>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -540,8 +579,8 @@ function renderSources(hits, normalized) {
     ${normalized ? `<div class="qnorm">検索した言葉: ${esc(normalized)}</div>` : ''}
     <div class="answer-body" id="abody"></div>
     <div id="astatus"><div class="status"><span class="spinner"></span>
-      <span class="stxt">本の言葉から答えを組み立てています…</span></div></div>
-    <h2 class="sec">引いた線 ${hits.length} 件</h2>
+      <span class="stxt">手がかりから答えを組み立てています…</span></div></div>
+    <h2 class="sec">手がかり ${hits.length} 件</h2>
     ${cards}
     <p class="hint" id="ameta" style="margin-top:18px"></p>`;
 }
@@ -581,7 +620,7 @@ async function doUnlock() {
       st.insertAdjacentHTML('beforeend', '<div class="bar"><i style="width:100%"></i></div>');
     });
     await dbPut('data', idx);
-    IDX = idx;
+    IDX = prepareIndex(idx);
     $('#m1').textContent = '✓';
 
     // 2. 埋め込みモデル (以後この端末の中だけで動く)
@@ -632,7 +671,7 @@ async function doAsk() {
     // 2. 端末内で検索。埋め込みも検索も 60ms 程度で終わるが、AI の起動だけは
     //    十数秒かかる。起動時に先読みしてあるので普通は待たない。
     setStatus(box, extractor
-      ? `${IDX.count.toLocaleString()} 件のハイライトを探しています…`
+      ? `${IDX.count.toLocaleString()} 件の中から探しています…`
       : 'AI を起こしています…（アプリを開いた直後だけ少しかかります）', true);
     const qvec = await embedQuery(query);
     await new Promise(r => setTimeout(r, 0));   // 表示を先に反映させる
@@ -674,11 +713,16 @@ async function doAsk() {
 }
 
 /* ═══════════ 画面 ═══════════ */
+function libSummary() {
+  const arts = IDX.books.filter(b => b.k === 'a').length;
+  const books = IDX.books.length - arts;
+  return `本 ${books} 冊 / 自分の記事 ${arts} 本 ／ ${IDX.count.toLocaleString()} 件`;
+}
+
 function showMain() {
   $('#lock').classList.add('hide');
   $('#main').classList.remove('hide');
-  $('#libinfo').textContent =
-    `${IDX.books.length} 冊 / ${IDX.count.toLocaleString()} ハイライト`;
+  $('#libinfo').textContent = libSummary();
 }
 function showLock() {
   $('#main').classList.add('hide');
@@ -694,6 +738,15 @@ async function init() {
     doAsk();
   });
 
+  $('#scope').addEventListener('click', e => {
+    const btn = e.target.closest('.sc');
+    if (!btn) return;
+    SCOPE = btn.dataset.scope;
+    [...$('#scope').children].forEach(b => b.classList.toggle('on', b === btn));
+    $('#btn-ask').textContent =
+      SCOPE === 'book' ? '本に聞く' : SCOPE === 'mine' ? '自分に聞く' : '聞く';
+  });
+
   $('#btn-unlock').onclick = doUnlock;
   $('#pass').addEventListener('keydown', e => { if (e.key === 'Enter') doUnlock(); });
   $('#btn-ask').onclick = doAsk;
@@ -705,7 +758,7 @@ async function init() {
     $('#apikey').value = localStorage.getItem('geminiApiKey') || '';
     $('#model').value = localStorage.getItem('geminiModel') || MODEL_FALLBACKS[0];
     $('#storeinfo').textContent = IDX
-      ? `取り込み済み: ${IDX.books.length} 冊 / ${IDX.count.toLocaleString()} ハイライト`
+      ? `取り込み済み: ${libSummary()}`
       : '蔵書は未取り込みです';
     $('#settings').classList.remove('hide');
   };
@@ -724,14 +777,14 @@ async function init() {
     $('#settings').classList.add('hide');
     $('#answer').innerHTML = '';
     $('#m1').textContent = '1';
-    $('#libinfo').textContent = '読んだ本のハイライトから答えを探す';
+    $('#libinfo').textContent = '読んだ本と自分の記事から答えを探す';
     showLock();
   };
 
   try {
     const saved = await dbGet('data');
     if (saved && saved.vectors && saved.vectors.length) {
-      IDX = saved;
+      IDX = prepareIndex(saved);
       showMain();
       // 相談を打ち込んでいる間に AI を起こしておく。待ってから読み込むと
       // 1 回目の検索だけ数秒よけいにかかる。失敗しても検索時に読み直す。
