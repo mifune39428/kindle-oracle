@@ -1,10 +1,10 @@
-/* 本に聞く — アプリの殻だけキャッシュする。
+/* みっふぃーAIに聞く — アプリの殻だけキャッシュする。
    蔵書データ (index.enc) は IndexedDB に入るのでここでは扱わない。
    Gemini API は必ずネットワークへ通す。 */
 
 // 中身を変えたらここの番号を上げる。activate で古いキャッシュを捨てるので、
 // 端末に残った旧版が返り続けるのを防げる。
-const CACHE = 'kindle-oracle-v4';
+const CACHE = 'kindle-oracle-v5';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
                './icon.svg', './icon-192.png', './icon-512.png',
                './apple-touch-icon.png'];
