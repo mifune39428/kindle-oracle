@@ -66,11 +66,20 @@ a{color:var(--accent)}
 #answer{margin-top:26px}
 .answer-body{white-space:pre-wrap;font-size:16.5px;line-height:1.85}
 .answer-body strong{color:var(--accent)}
+.answer-body b.step{display:inline-block;margin-top:10px;font-weight:700}
+.answer-body .lbl{display:inline-block;font-size:12px;font-weight:600;color:var(--muted);
+  border:1px solid var(--line);border-radius:6px;padding:0 6px;margin-right:6px}
 .qnorm{font-size:12.5px;color:var(--muted);margin-bottom:14px}
 .cite{display:inline-block;background:var(--accent);color:var(--accent-ink);
   font-size:11px;font-weight:700;min-width:19px;height:19px;line-height:19px;
   text-align:center;border-radius:5px;margin:0 2px;vertical-align:1px;
   text-decoration:none;padding:0 4px}
+details.srcs{margin-top:30px}
+details.srcs>summary{font-size:13px;color:var(--muted);font-weight:600;cursor:pointer;
+  padding:12px 14px;border:1px solid var(--line);border-radius:12px;list-style:none;margin-bottom:12px}
+details.srcs>summary::-webkit-details-marker{display:none}
+details.srcs>summary::before{content:'▸ ';color:var(--accent)}
+details.srcs[open]>summary::before{content:'▾ '}
 h2.sec{font-size:13px;color:var(--muted);font-weight:600;margin:30px 0 12px;
   letter-spacing:.06em;display:flex;align-items:center;gap:10px}
 h2.sec::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -526,23 +535,40 @@ function answerPrompt(query, hits) {
   }).join('\n\n');
 
   return `\
-あなたは、相談者本人が過去に読んで線を引いた本のハイライトと、\
-相談者自身が過去に書いた記事だけを手がかりに、\
-悩みへの具体的な打ち手を示すアシスタントです。
+あなたは、相談者の話を聞いて一緒に考える相談相手です。
+材料は2つだけ。相談者が過去に読んで線を引いた本の一節と、相談者自身が過去に書いた記事です。
 
-# 絶対に守ること
-- 下の「手がかり」に書かれている内容だけを根拠にする。一般論で埋めない。
-- 「自分の記事」は相談者自身が書いたもの。日付があるときは「2026-05-02 に自分で書いた\
-とおり」のように、いつの自分かが分かる形で引く。
-- 主張のたびに、根拠にしたハイライトの番号を [1] [3] のように必ず書く。
-- 悩みに本当に効く手がかりが無いときは、無理に答えを作らず「今の蔵書には\
-ぴったりの箇所が見当たらない」と正直に言い、いちばん近い箇所だけを紹介する。
-- 相談者は iPhone の小さい画面で読む。前置き・お世辞・繰り返しは書かない。
+# あなたの仕事
+材料を並べ直すことではありません。材料を組み合わせて相談者の状況に当てはめ、\
+「だから、あなたはこうするといい」まで考え抜くことです。
+
+# 守ること
+- 手がかりを1つずつ言い換えて並べない。複数の手がかりをつないで、1つの考えにまとめる。
+- 相談文に書かれた状況（何に困っているか・何を気にしているか）を必ず使って具体化する。\
+誰にでも言える助言にしない。
+- 行動は「何を・どれくらい・いつ」まで書く。「意識する」「大切にする」で終わらせない。
+- どの手がかりから考えたかは [1] [3] のように番号で示す。つなぎの推論や具体化の部分には番号は要らない。
+- 手がかりに無い事実・数字・本の言葉を作らない。考えを補うのはよいが、引用を捏造しない。
+- 「自分の記事」は相談者自身が書いたもの。日付があれば「2026-05-02 のあなた自身も〜と書いている」\
+のように、過去の自分の言葉として返す。
+- 相談に効く手がかりがほとんど無いときは、その旨を1行で言ってから、近い手がかりで考えられる範囲だけ答える。
+- iPhone の小さい画面で読む。前置き・お世辞・同じことの繰り返しは書かない。
 
 # 出力の形
-1 行目: 相談の要点を 1 文で言い換える
-空行のあと: 打ち手を最大 3 つ。各項目は「**見出し**」で始め、2〜3 文。出典番号つき。
-最後: 「今日やること: 」で始まる 1 行。すぐ実行できる小さな行動をひとつだけ。
+**見立て**
+なぜいまそうなっているのかを2〜3文で。手がかりを組み合わせて説明する。
+
+**打ち手**
+3つまで。各項目は「1. 見出し」の1行で始め、続けて次の2行を書く。
+やること: 具体的な行動（何を・どれくらい・いつ）
+なぜ効くか: 手がかりから考えた理由（番号つき）
+
+**今日やること**
+5分でできる行動を1つだけ、1行で。
+
+相談文だけでは状況が分からず、答えが大きく変わりそうなときだけ、最後に次を足す。
+**聞きたいこと**
+1つだけ、1行で。
 
 # 相談
 ${query}
@@ -580,8 +606,10 @@ function renderSources(hits, normalized) {
     <div class="answer-body" id="abody"></div>
     <div id="astatus"><div class="status"><span class="spinner"></span>
       <span class="stxt">手がかりから答えを組み立てています…</span></div></div>
-    <h2 class="sec">手がかり ${hits.length} 件</h2>
-    ${cards}
+    <details class="srcs" id="srcs">
+      <summary>根拠にした手がかり ${hits.length} 件</summary>
+      ${cards}
+    </details>
     <p class="hint" id="ameta" style="margin-top:18px"></p>`;
 }
 
@@ -591,6 +619,9 @@ function updateAnswerText(text, hits) {
   if (!body) return;
   body.innerHTML = esc(text)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // 打ち手の「1. 見出し」を太く、「やること:」「なぜ効くか:」はラベルに
+    .replace(/^(\d\. .+)$/gm, '<b class="step">$1</b>')
+    .replace(/^(やること|なぜ効くか)[:：]\s*/gm, '<span class="lbl">$1</span>')
     .replace(/\[(\d{1,2})\]/g, (m, n) => {
       const i = +n;
       return (i >= 1 && i <= hits.length)
@@ -684,7 +715,7 @@ async function doAsk() {
 
     // 4. 本の言葉だけで答えを組み立てる。届いた端から書いていく。
     const {text, model} = await generate(
-      answerPrompt(raw, hits), 2048, t => updateAnswerText(t, hits));
+      answerPrompt(raw, hits), 3000, t => updateAnswerText(t, hits));
     updateAnswerText(text, hits);
     const done = $('#astatus'); if (done) done.remove();
     const meta = $('#ameta');
@@ -745,6 +776,12 @@ async function init() {
     [...$('#scope').children].forEach(b => b.classList.toggle('on', b === btn));
     $('#btn-ask').textContent =
       SCOPE === 'book' ? '本に聞く' : SCOPE === 'mine' ? '自分に聞く' : '聞く';
+  });
+
+  $('#answer').addEventListener('click', e => {
+    if (!e.target.closest('a.cite')) return;
+    const d = $('#srcs');
+    if (d) d.open = true;
   });
 
   $('#btn-unlock').onclick = doUnlock;
